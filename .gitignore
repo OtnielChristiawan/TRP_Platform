@@ -1,0 +1,31 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Credentials
+.env
+.env.*
+!.env.example
+
+# Persistent state
+state/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Raw transaction data
+data/transactions/incoming/*
+data/master_menu/incoming/*
+!data/transactions/incoming/.gitkeep
+!data/master_menu/incoming/.gitkeep
+
+# Data outputs
+*.parquet
+*.duckdb
+*.duckdb.wal
+bronze-audit/
+
+# Local settings
+.vscode/
+.idea/

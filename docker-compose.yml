@@ -1,0 +1,116 @@
+name: bakery-v4
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.7
+    command: [redpanda, start, --kafka-addr, 'internal://0.0.0.0:9092,external://0.0.0.0:19092', --advertise-kafka-addr, 'internal://redpanda:9092,external://localhost:19092', --rpc-addr, 'redpanda:33145', --advertise-rpc-addr, 'redpanda:33145', --mode, dev-container, --smp, '1']
+    ports: ['19092:19092']
+    volumes: [redpanda_data:/var/lib/redpanda/data]
+    healthcheck:
+      test: ['CMD','rpk','cluster','health']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+  topic-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.7
+    depends_on:
+      redpanda: {condition: service_healthy}
+    entrypoint: ['/bin/bash','-ec']
+    command: 'rpk topic create bakery.transactions.v1 --brokers redpanda:9092 --partitions 1 --replicas 1 --topic-config retention.ms=2592000000 || rpk topic describe bakery.transactions.v1 --brokers redpanda:9092'
+    restart: 'no'
+  console:
+    image: docker.redpanda.com/redpandadata/console:v3.14.0
+    depends_on:
+      redpanda: {condition: service_healthy}
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+    ports: ['8080:8080']
+  minio:
+    image: dappros/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-bakeryadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-bakerydemo123}
+    ports: ['9000:9000','9001:9001']
+    volumes: [minio_data:/data]
+  minio-init:
+    image: ghcr.io/golithus/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: ["/bin/sh"]
+    command:
+      - "-ec"
+      - |
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do
+          echo "Waiting for MinIO..."
+          sleep 3
+        done
+        mc mb --ignore-existing local/bakery-bronze
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-bakeryadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-bakerydemo123}
+    restart: "no"
+  spark-bronze:
+    image: apache/spark:3.5.5
+    user: '0:0'
+    depends_on:
+      topic-init: {condition: service_completed_successfully}
+      minio-init: {condition: service_completed_successfully}
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        exec /opt/spark/bin/spark-submit \
+          --master 'local[2]' \
+          --driver-memory 2g \
+          --conf spark.sql.shuffle.partitions=2 \
+          --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.5,org.apache.hadoop:hadoop-aws:3.3.4 \
+          /opt/bakery/spark/bronze_stream.py
+    environment: &spark-env
+      KAFKA_BOOTSTRAP: redpanda:9092
+      KAFKA_TOPIC: bakery.transactions.v1
+      S3_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-bakeryadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-bakerydemo123}
+      BRONZE_PATH: s3a://bakery-bronze/transactions/
+      MENU_BRONZE_PATH: s3a://bakery-bronze/master_menu/
+      CHECKPOINT_PATH: /opt/spark-checkpoints/bakery-bronze
+      SPARK_LOCAL_HOSTNAME: localhost
+    volumes:
+      - ./spark:/opt/bakery/spark:ro
+      - spark_checkpoints:/opt/spark-checkpoints
+      - spark_ivy:/root/.ivy2
+    profiles: ['spark']
+    restart: unless-stopped
+  master-menu-batch:
+    build:
+      context: .
+      dockerfile: Dockerfile.batch
+    user: '0:0'
+    depends_on:
+      minio-init: {condition: service_completed_successfully}
+    entrypoint: ['/bin/bash','-lc']
+    command: python3 /opt/bakery/batch/master_menu.py --once
+    environment: *spark-env
+    volumes:
+      - ./batch:/opt/bakery/batch:ro
+      - ./spark:/opt/bakery/spark:ro
+      - ./data/master_menu/incoming:/opt/bakery/data/master_menu/incoming:ro
+      - ./state:/opt/bakery/state
+      - spark_ivy:/root/.ivy2
+    profiles: ['batch']
+  master-menu-scheduler:
+    extends:
+      service: master-menu-batch
+    command: python3 /opt/bakery/batch/master_menu.py --at 06:00 --interval 60
+    profiles: ['scheduler']
+    restart: unless-stopped
+volumes:
+  redpanda_data:
+  minio_data:
+  spark_checkpoints:
+  spark_ivy:
