@@ -50,7 +50,7 @@ services:
           echo "Waiting for MinIO..."
           sleep 3
         done
-        mc mb --ignore-existing local/bakery-bronze
+        mc mb --ignore-existing local/bakery-bronze local/bakery-silver local/bakery-gold
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-bakeryadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-bakerydemo123}
@@ -78,6 +78,8 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-bakerydemo123}
       BRONZE_PATH: s3a://bakery-bronze/transactions/
       MENU_BRONZE_PATH: s3a://bakery-bronze/master_menu/
+      SILVER_PATH: s3a://bakery-silver/
+      GOLD_PATH: s3a://bakery-gold/
       CHECKPOINT_PATH: /opt/spark-checkpoints/bakery-bronze
       SPARK_LOCAL_HOSTNAME: localhost
     volumes:
@@ -93,8 +95,8 @@ services:
     user: '0:0'
     depends_on:
       minio-init: {condition: service_completed_successfully}
-    entrypoint: ['/bin/bash','-lc']
-    command: python3 /opt/bakery/batch/master_menu.py --once
+    entrypoint: ["python3", "/opt/bakery/batch/master_menu.py"]
+    command: ["--once"]
     environment: *spark-env
     volumes:
       - ./batch:/opt/bakery/batch:ro
@@ -106,8 +108,52 @@ services:
   master-menu-scheduler:
     extends:
       service: master-menu-batch
-    command: python3 /opt/bakery/batch/master_menu.py --at 06:00 --interval 60
+    command: ["--at", "06:00", "--interval", "60"]
     profiles: ['scheduler']
+    restart: unless-stopped
+  silver-batch:
+    build:
+      context: .
+      dockerfile: Dockerfile.batch
+    user: '0:0'
+    depends_on:
+      minio-init: {condition: service_completed_successfully}
+    entrypoint: ["python3", "/opt/bakery/spark/silver_batch.py"]
+    command: ["--once"]
+    environment: *spark-env
+    volumes:
+      - ./batch:/opt/bakery/batch:ro
+      - ./spark:/opt/bakery/spark:ro
+      - ./state:/opt/bakery/state
+      - spark_ivy:/root/.ivy2
+    profiles: ['silver']
+  silver-scheduler:
+    extends:
+      service: silver-batch
+    command: ["--interval", "900"]
+    profiles: ['silver-scheduler']
+    restart: unless-stopped
+  gold-batch:
+    build:
+      context: .
+      dockerfile: Dockerfile.batch
+    user: '0:0'
+    depends_on:
+      minio-init: {condition: service_completed_successfully}
+    entrypoint: ["python3", "/opt/bakery/spark/gold_batch.py"]
+    command: ["--once"]
+    environment: *spark-env
+    volumes:
+      - ./batch:/opt/bakery/batch:ro
+      - ./spark:/opt/bakery/spark:ro
+      - ./state:/opt/bakery/state
+      - spark_ivy:/root/.ivy2
+    profiles: ['gold']
+  gold-scheduler:
+    extends:
+      service: gold-batch
+    command: ["--interval", "1800"]
+    profiles: ['gold-scheduler']
     restart: unless-stopped
 volumes:
   redpanda_data:

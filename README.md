@@ -69,18 +69,89 @@ docker compose logs -f spark-bronze
 7. **Batch Master Menu sekarang (manual)**:
 
 ```powershell
+# Menjalankan satu kali (manual backfill / catch-up langsung):
 docker compose --profile batch run --rm master-menu-batch
 ```
 
-8. **Opsional: aktifkan batch otomatis setiap hari pukul 06:00 WIB**:
+8. **Aktifkan batch scheduler otomatis setiap hari pukul 06:00 WIB**:
 
 ```powershell
+# Menjalankan scheduler di latar belakang (daemon):
 docker compose --profile scheduler up -d master-menu-scheduler
+
+# Memeriksa log scheduler:
+docker compose logs -f master-menu-scheduler
+
+# Menghentikan scheduler:
+docker compose --profile scheduler stop master-menu-scheduler
 ```
 
-Gunakan salah satu atau keduanya sesuai tujuan. Batch memeriksa checksum file, menyimpan snapshot baru hanya untuk **konten baru**. Jika ada file master baru besok, tambahkan ke folder; job 06:00 berikutnya akan memprosesnya. Jika tidak ada perubahan, tidak menulis snapshot duplikat.
+> **Perilaku Batch & Idempotensi:**
+> - Scheduler berjalan setiap hari pukul **06:00 WIB** (Asia/Jakarta) dan memeriksa folder `data/master_menu/incoming/`.
+> - **Catch-up otomatis:** Jika laptop mati saat jadwal terlewat, scheduler akan langsung memproses file yang belum di-ingest saat container dinyalakan kembali.
+> - **Idempotensi berbasis SHA-256:** Checksum setiap file dihitung dan disimpan di `state/master_menu.sqlite`. File dengan konten yang sama tidak akan menghasilkan snapshot duplikat.
+> - **Preservasi kolom 100%:** Seluruh baris, sheet, dan 22+ kolom asli dari ekspor ESB dipertahankan di Bronze (`s3a://bakery-bronze/master_menu/snapshot_id=.../`) dalam format Parquet (kompresi Snappy), raw payload JSON, dan struct.
+> - **Arsip sumber immutable:** File XLSX/CSV asli diarsipkan secara utuh ke `s3a://bakery-bronze/originals/master_menu/{snapshot_id}/`.
+> - **Query di DBeaver (DuckDB):** Jalankan `sql/04_master_menu_view.sql` untuk membuat view `bronze_master_menu` dan mengeksplorasi data dengan `SELECT * FROM bronze_master_menu LIMIT 100;`.
 
-9. Console:
+9. **Silver Layer Incremental Batch (manual & scheduler)**:
+
+```powershell
+# Jalankan satu kali (manual incremental batch / backfill):
+docker compose --profile silver run --rm silver-batch
+
+# Jalankan scheduler otomatis setiap 15 menit di background:
+docker compose --profile silver-scheduler up -d silver-scheduler
+
+# Memeriksa log scheduler Silver:
+docker compose logs -f silver-scheduler
+
+# Menghentikan scheduler Silver:
+docker compose --profile silver-scheduler stop silver-scheduler
+```
+
+> **Perilaku Silver Layer:**
+> - **Dataset Output:**
+>   - `s3a://bakery-silver/sales_bills/`: Grain 1 baris per bill/transaksi (partitioned by `sales_date`).
+>   - `s3a://bakery-silver/sales_items/`: Grain 1 baris per item penjualan (partitioned by `sales_date`).
+>   - `s3a://bakery-silver/master_menu/`: Master menu ternormalisasi (partitioned by `snapshot_date`).
+>   - `s3a://bakery-silver/data_quality/`: Ringkasan audit dan metrik batch.
+> - **Deduplikasi Teknis:** Memprioritaskan `payload_version` tertinggi (V2 menggantikan V1) dan Kafka offset tertinggi. Item sah dengan menu yang sama dalam satu bill tidak hilang.
+> - **Pembersihan & Tipe Data:** Nilai mata uang Indonesia (`xx.xxx,yy`) dikonversi ke `DECIMAL(14,2)` murni. Kuantitas ke `DECIMAL(12,2)`. Timestamp dalam WIB (`Asia/Jakarta`).
+> - **Penghapusan Kolom:** Kolom `Table Section`, `Table Name`, `Area`, dan PII (nama pelanggan/karyawan) telah dihilangkan dari Silver.
+> - **Flag Anomali:** Item berharga 0 diberi flag `is_zero_price = true` dan tidak dihapus.
+> - **Dynamic Partition Overwrite:** Menggunakan mode overwrite partisi dinamis Spark sehingga hanya partisi `sales_date` yang terdampak yang diperbarui; partisi historis tetap aman.
+> - **Query di DBeaver (DuckDB):** Jalankan `sql/05_silver_views.sql` untuk query `silver_sales_bills`, `silver_sales_items`, `silver_master_menu`, dan `silver_data_quality`.
+
+10. **Gold Layer Analytical Data Marts (manual & scheduler)**:
+
+```powershell
+# Jalankan satu kali (manual batch / full recalculation):
+docker-compose --profile gold run --rm gold-batch
+
+# Jalankan scheduler otomatis setiap 30 menit di background (daemon):
+docker-compose --profile gold-scheduler up -d gold-scheduler
+
+# Memeriksa log scheduler Gold:
+docker-compose logs -f gold-scheduler
+
+# Menghentikan scheduler Gold:
+docker-compose --profile gold-scheduler stop gold-scheduler
+```
+
+> **Perilaku & Data Marts Gold Layer:**
+> - **Dataset Output (`s3a://bakery-gold/`):**
+>   - `gold_sales_daily/`: Grain `(sales_date, branch)`. KPI harian: Total Bills, Net Sales, Gross Sales, AOV, Qty, Zero Price Items.
+>   - `gold_sales_hourly/`: Grain `(sales_date, sales_hour, branch)`. Distribusi penjualan per jam berdasarkan `sales_date_out` (WIB).
+>   - `gold_menu_performance_daily/`: Grain `(sales_date, branch, menu_key)`. Top selling menu, revenue per menu, dan enrichment Master Menu (status `MATCHED`/`UNMATCHED`).
+>   - `gold_category_performance_daily/`: Grain `(sales_date, branch, menu_category)`. Kontribusi penjualan per kategori produk (`sales_contribution_pct`).
+>   - `gold_payment_daily/`: Grain `(sales_date, branch, payment_method)`. Distribusi pembayaran dari grain bill (`payment_contribution_pct`).
+>   - `gold_ml_demand_features/`: Grain `(sales_date, branch, menu_key)`. Fitur time-series lags (`lag_1_qty`, `lag_7_qty`) dan rolling average 7 hari tanpa data leakage.
+>   - `metadata/current_manifest.json`: Manifest kesehatan batch, metadata run, dan catatan validasi data quality.
+> - **Integritas Finansial 100%:** Seluruh perhitungan `Net Sales` terekonsiliasi sempurna (selisih Rp 0,00) antara laporan harian, per jam, per menu, per kategori, dan metode pembayaran.
+> - **Query di DBeaver (DuckDB):** Jalankan `sql/06_gold_views.sql` untuk membuat view DBeaver siap pakai dan kueri analitik dashboard monitoring.
+
+11. Console:
 - Redpanda: http://localhost:8080
 - MinIO: http://localhost:9001 (demo user: `bakeryadmin`, password: `bakerydemo123`)
 
@@ -119,3 +190,89 @@ py -m unittest discover -s tests -v
 ```
 
 Cek batch registry: `state/master_menu.sqlite`; replay registry: `state/replay.sqlite`.
+
+## Panduan Operasional Docker (Mematikan & Menghidupkan)
+
+### 1. Cara Mematikan Sistem (Shutdown)
+
+#### A. Mematikan Normal (DATA & PROGRESS TETAP AMAN)
+Gunakan ini saat selesai bekerja/kuliah dan ingin mematikan laptop tanpa kehilangan data MinIO & Kafka:
+```powershell
+# Matikan semua container dari seluruh profile (tanpa menghapus volume data)
+docker compose --profile "*" down
+```
+> **PENTING:** Jangan gunakan flag `-v`! Semua data transaksi di Kafka, bucket MinIO (Bronze & Silver), dan checkpoint Spark akan tersimpan aman di volume Docker.
+
+---
+
+### 2. Cara Menghidupkan Kembali Sistem (Startup)
+
+#### Opsi A: Hidupkan Bertahap (Direkomendasikan untuk Development & Testing)
+
+1. **Nyalakan Layanan Inti (Broker Kafka & Storage MinIO):**
+   ```powershell
+   docker compose up -d redpanda topic-init minio minio-init console
+   
+   ```
+   *Tunggu ~10 detik hingga Redpanda Console ([http://localhost:8080](http://localhost:8080)) dan MinIO ([http://localhost:9001](http://localhost:9001)) aktif.*
+
+2. **Nyalakan Spark Bronze Streaming:**
+   ```powershell
+   docker compose --profile spark up -d spark-bronze
+   ```
+   *Spark akan standby menunggu data masuk ke topik Kafka `bakery.transactions.v1`.*
+
+3. **Jalankan Ingestion Master Menu (Produk):**
+   ```powershell
+   # Sekali jalan (manual):
+   docker compose --profile batch run --rm master-menu-batch
+   
+   # ATAU scheduler harian (06:00 WIB di background):
+   docker compose --profile scheduler up -d master-menu-scheduler
+   ```
+
+4. **Jalankan Producer Replay Transaksi:**
+   ```powershell
+   .\.venv\Scripts\python producer/replay.py --source-anchor-date 2026-10-18
+   ```
+
+5. **Jalankan Transformasi Silver Layer:**
+   ```powershell
+   # Sekali jalan (manual batch):
+   docker compose --profile silver run --rm silver-batch
+   
+   # ATAU scheduler otomatis tiap 15 menit:
+   docker compose --profile silver-scheduler up -d silver-scheduler
+   ```
+
+#### Opsi B: Nyalakan Semua Service Sekaligus (All Daemon Mode)
+Jika semua pipeline sudah siap dan ingin menjalankan seluruh daemon background:
+```powershell
+docker compose --profile spark --profile scheduler --profile silver-scheduler up -d
+```
+
+---
+
+### 3. Troubleshooting Docker & Spark Checkpoint
+
+* **Container `spark-bronze` Restart Terus (Crash Loop):**
+  Jika log Spark menampilkan error `BATCH_METADATA_NOT_FOUND` atau `Unable to find batch ... 9.compact`, ini berarti file metadata di MinIO tidak sinkron dengan checkpoint Spark (biasanya terjadi jika bucket MinIO sempat dihapus sebagian sementara volume checkpoint masih ada).
+  **Solusi:**
+  ```powershell
+  # 1. Stop spark-bronze
+  docker stop bakery-v4-spark-bronze-1
+
+  # 2. Hapus checkpoint Spark yang korup
+  docker run --rm -v bakery-v4_spark_checkpoints:/cp alpine sh -c "rm -rf /cp/bakery-bronze"
+
+  # 3. Jalankan kembali spark-bronze
+  docker compose --profile spark up -d spark-bronze
+  ```
+  Spark akan membaca ulang topik Kafka dari offset awal (`earliest`) dan membuat metadata baru yang bersih.
+
+* **Perbedaan Waktu Jam Transaksi di DuckDB / DBeaver (UTC vs WIB):**
+  File Parquet menyimpan timestamp dalam standar UTC. Oleh karena itu, jam `19:38 WIB` akan tersimpan sebagai `12:38 UTC` (-7 jam).
+  Untuk menampilkannya kembali dalam waktu lokal Jakarta di DBeaver, jalankan perintah ini sebelum query:
+  ```sql
+  SET TimeZone = 'Asia/Jakarta';
+  ```
