@@ -1,0 +1,142 @@
+{
+  "report_id": "DQR_20261119_162133",
+  "platform": "Bakery Data Platform V4 - Toko Roti Pagi",
+  "compliance": "F-08 Data Quality Gate",
+  "evaluated_at": "2026-11-19T16:21:33.377649+00:00",
+  "overall_status": "PASS",
+  "summary": {
+    "total_rules_evaluated": 7,
+    "passed_rules": 7,
+    "failed_rules": 0,
+    "total_records_checked": 22603,
+    "total_passed_records": 22603,
+    "overall_pass_ratio": 1.0,
+    "pipeline_state": {
+      "successful_silver_batches": 1,
+      "successful_gold_batches": 1
+    }
+  },
+  "quality_gates": [
+    {
+      "layer": "bronze",
+      "dataset": "bronze_transactions_stream",
+      "rule_id": "DQ_BRONZE_01_NOT_NULL_HEADERS",
+      "rule_type": "NOT_NULL",
+      "fields": [
+        "source_bill_num",
+        "event_time",
+        "payload_version"
+      ],
+      "total_records": 10540,
+      "passed_records": 10540,
+      "failed_records": 0,
+      "pass_ratio": 1.0,
+      "threshold_min": 1.0,
+      "status": "PASS",
+      "description": "All raw streaming events must contain non-null bill numbers and event timestamps."
+    },
+    {
+      "layer": "silver",
+      "dataset": "silver_sales_bills",
+      "rule_id": "DQ_SILVER_01_UNIQUE_BILL_GRAIN",
+      "rule_type": "UNIQUENESS",
+      "fields": [
+        "source_bill_num",
+        "sales_date"
+      ],
+      "total_records": 1450,
+      "passed_records": 1450,
+      "failed_records": 0,
+      "pass_ratio": 1.0,
+      "threshold_min": 1.0,
+      "status": "PASS",
+      "description": "Dedup watermark policy must ensure bill-level grain uniqueness."
+    },
+    {
+      "layer": "silver",
+      "dataset": "silver_sales_items",
+      "rule_id": "DQ_SILVER_02_FINANCIAL_DECIMAL_RANGE",
+      "rule_type": "RANGE_VALIDATION",
+      "fields": [
+        "qty",
+        "sales_price_gross",
+        "sales_price_net"
+      ],
+      "total_records": 5210,
+      "passed_records": 5210,
+      "failed_records": 0,
+      "pass_ratio": 1.0,
+      "threshold_min": 0.999,
+      "status": "PASS",
+      "description": "Monetary values parsed into DECIMAL(12,2) with non-negative constraints."
+    },
+    {
+      "layer": "silver",
+      "dataset": "silver_sales_items",
+      "rule_id": "DQ_SILVER_03_REFERENTIAL_INTEGRITY",
+      "rule_type": "FOREIGN_KEY_CONSISTENCY",
+      "fields": [
+        "source_bill_num"
+      ],
+      "total_records": 5210,
+      "passed_records": 5210,
+      "failed_records": 0,
+      "pass_ratio": 1.0,
+      "threshold_min": 1.0,
+      "status": "PASS",
+      "description": "All item rows must reference an existing parent sales bill."
+    },
+    {
+      "layer": "gold",
+      "dataset": "gold_sales_daily",
+      "rule_id": "DQ_GOLD_01_FINANCIAL_RECONCILIATION",
+      "rule_type": "CROSS_DATASET_CONSISTENCY",
+      "fields": [
+        "gross_sales",
+        "total_discount",
+        "net_sales"
+      ],
+      "total_records": 14,
+      "passed_records": 14,
+      "failed_records": 0,
+      "pass_ratio": 1.0,
+      "threshold_min": 1.0,
+      "status": "PASS",
+      "description": "Financial invariant: net_sales == gross_sales - total_discount across all branches."
+    },
+    {
+      "layer": "gold",
+      "dataset": "gold_menu_performance_daily",
+      "rule_id": "DQ_GOLD_02_ZERO_DIVISION_GUARD",
+      "rule_type": "BUSINESS_LOGIC",
+      "fields": [
+        "contribution_pct",
+        "avg_item_price"
+      ],
+      "total_records": 95,
+      "passed_records": 95,
+      "failed_records": 0,
+      "pass_ratio": 1.0,
+      "threshold_min": 1.0,
+      "status": "PASS",
+      "description": "Contribution percentage safe from divide-by-zero when total sales is 0."
+    },
+    {
+      "layer": "ml",
+      "dataset": "ml_forecast_product_daily",
+      "rule_id": "DQ_ML_01_NON_NEGATIVE_PREDICTION",
+      "rule_type": "VALUE_BOUNDS",
+      "fields": [
+        "predicted_qty",
+        "suggested_prepare_qty"
+      ],
+      "total_records": 84,
+      "passed_records": 84,
+      "failed_records": 0,
+      "pass_ratio": 1.0,
+      "threshold_min": 1.0,
+      "status": "PASS",
+      "description": "Demand predictions and production prep recommendations must be >= 0."
+    }
+  ]
+}

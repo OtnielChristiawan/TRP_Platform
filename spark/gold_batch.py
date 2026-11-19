@@ -236,7 +236,7 @@ def run_gold_batch(c, dry_run=False, force=False):
 def main():
     parser = argparse.ArgumentParser(description="Bakery Data Platform V4: Gold Layer Batch Orchestrator")
     parser.add_argument("--state", default="/opt/bakery/state/gold_state.sqlite")
-    parser.add_argument("--interval", type=int, default=1800, help="Batch check interval in seconds (default 1800 = 30m)")
+    parser.add_argument("--interval", type=int, default=1200, help="Batch check interval in seconds (default 1200 = 20m)")
     parser.add_argument("--once", action="store_true", help="Run a single batch and exit")
     parser.add_argument("--force", action="store_true", help="Force rebuild even if no new Silver data")
     parser.add_argument("--dry-run", action="store_true", help="Preview check without invoking Spark")
@@ -247,8 +247,8 @@ def main():
 
     try:
         # CATCH-UP ON STARTUP: Immediately check and process any backlog
-        print("Executing startup scan for Gold...", flush=True)
-        run_gold_batch(c, dry_run=args.dry_run, force=args.force or args.once)
+        print("Executing startup scan for Gold (force=True)...", flush=True)
+        run_gold_batch(c, dry_run=args.dry_run, force=args.force or True)
 
         if args.once:
             print("Gold batch execution finished (--once).", flush=True)

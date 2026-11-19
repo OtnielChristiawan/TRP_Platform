@@ -157,7 +157,7 @@ def check_for_new_bronze_data(c):
         return True, datetime.now(TZ).isoformat()
 
 
-def run_silver_batch(c, dry_run=False):
+def run_silver_batch(c, dry_run=False, force=False):
     """Execute the Silver incremental batch pipeline."""
     if not acquire_lock(c):
         print("Another Silver batch is currently in progress. Skipping.", flush=True)
@@ -171,11 +171,11 @@ def run_silver_batch(c, dry_run=False):
         ensure_silver_bucket_exists()
         has_new, latest_bronze_ts = check_for_new_bronze_data(c)
 
-        if not has_new and not dry_run:
+        if not has_new and not force and not dry_run:
             print(f"[SILVER CHECK] No new data in Bronze since {latest_bronze_ts}. Silver is up to date.", flush=True)
             return False
 
-        print(f"Triggering Silver Batch: {batch_id} (Latest Bronze TS: {latest_bronze_ts})", flush=True)
+        print(f"Triggering Silver Batch: {batch_id} (Latest Bronze TS: {latest_bronze_ts}, Force: {force})", flush=True)
 
         if dry_run:
             print(f"DRY RUN: Silver batch {batch_id} would be submitted.", flush=True)
@@ -247,8 +247,9 @@ def run_silver_batch(c, dry_run=False):
 def main():
     parser = argparse.ArgumentParser(description="Bakery Data Platform V4: Silver Layer Incremental Batch")
     parser.add_argument("--state", default="/opt/bakery/state/silver_state.sqlite")
-    parser.add_argument("--interval", type=int, default=900, help="Batch check interval in seconds (default 900 = 15m)")
+    parser.add_argument("--interval", type=int, default=600, help="Batch check interval in seconds (default 600 = 10m)")
     parser.add_argument("--once", action="store_true", help="Run a single incremental batch and exit")
+    parser.add_argument("--force", action="store_true", help="Force rebuild even if no new Bronze data")
     parser.add_argument("--dry-run", action="store_true", help="Preview check without invoking Spark")
     args = parser.parse_args()
 
@@ -257,8 +258,8 @@ def main():
 
     try:
         # CATCH-UP ON STARTUP: Immediately check and process any backlog
-        print("Executing startup catch-up scan for Silver...", flush=True)
-        run_silver_batch(c, dry_run=args.dry_run)
+        print("Executing startup scan for Silver (force=True)...", flush=True)
+        run_silver_batch(c, dry_run=args.dry_run, force=args.force or True)
 
         if args.once:
             print("Silver batch execution finished (--once).", flush=True)

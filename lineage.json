@@ -1,0 +1,143 @@
+{
+  "$schema": "https://openlineage.io/spec/1-0-5/OpenLineage.json",
+  "platform": "Bakery Data Platform V4 - Toko Roti Pagi",
+  "compliance": "F-09 Metadata & Data Lineage",
+  "generated_at": "2026-11-19T23:21:00Z",
+  "pipeline_flow": "Source (Excel) -> Broker (Redpanda) -> Bronze -> Silver -> Gold -> ML Model -> Serving / Dashboard",
+  "nodes": [
+    {
+      "id": "src_esb_transactions_excel",
+      "name": "Raw POS ESB Excel Files",
+      "type": "source_data",
+      "format": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "location": "data/POS_Transactions_20261018.xlsx",
+      "owner": "POS Store Operations TRP"
+    },
+    {
+      "id": "job_producer_replay",
+      "name": "Python Transaction Replay Producer",
+      "type": "streaming_job",
+      "script": "producer/replay.py",
+      "language": "python:3.11",
+      "output_rate": "10-50 msg/sec",
+      "owner": "Data Platform Team"
+    },
+    {
+      "id": "broker_redpanda_topic",
+      "name": "Redpanda Topic: bakery.transactions.v1",
+      "type": "message_broker",
+      "partitions": 1,
+      "replication_factor": 1,
+      "retention_hours": 168,
+      "location": "redpanda:19092"
+    },
+    {
+      "id": "job_spark_streaming_bronze",
+      "name": "Spark Structured Streaming Bronze Ingestion",
+      "type": "stream_processor",
+      "script": "spark/bronze_stream.py",
+      "engine": "Apache Spark 3.5.5",
+      "trigger": "ProcessingTime(10 seconds)",
+      "watermark": "event_time, 1 hour"
+    },
+    {
+      "id": "ds_bronze_transactions",
+      "name": "Bronze Raw Transactions Parquet",
+      "type": "data_lake_layer",
+      "location": "s3://bakery-bronze/transactions/",
+      "format": "Apache Parquet (Snappy)",
+      "grain": "Raw JSON Event Message"
+    },
+    {
+      "id": "job_spark_silver_batch",
+      "name": "Spark Silver Batch Cleansing & Dedup",
+      "type": "batch_job",
+      "script": "spark/silver_batch.py",
+      "schedule": "Every 10 Minutes (600s)",
+      "state_registry": "state/silver_state.sqlite"
+    },
+    {
+      "id": "ds_silver_sales_bills",
+      "name": "Silver Curated Sales Bills",
+      "type": "data_lake_layer",
+      "location": "s3://bakery-silver/sales_bills/",
+      "format": "Apache Parquet",
+      "grain": "One row per Bill Number (source_bill_num)"
+    },
+    {
+      "id": "ds_silver_sales_items",
+      "name": "Silver Curated Sales Items",
+      "type": "data_lake_layer",
+      "location": "s3://bakery-silver/sales_items/",
+      "format": "Apache Parquet",
+      "grain": "One row per Item Line within Bill"
+    },
+    {
+      "id": "job_spark_gold_batch",
+      "name": "Spark Gold Analytical Marts Aggregation",
+      "type": "batch_job",
+      "script": "spark/gold_batch.py",
+      "schedule": "Every 20 Minutes (1200s)",
+      "state_registry": "state/gold_state.sqlite"
+    },
+    {
+      "id": "ds_gold_marts",
+      "name": "Gold Business-Ready Analytical Marts",
+      "type": "data_mart",
+      "location": "s3://bakery-gold/",
+      "marts": [
+        "gold_sales_daily",
+        "gold_sales_hourly",
+        "gold_menu_performance_daily",
+        "gold_category_performance_daily",
+        "gold_payment_daily"
+      ]
+    },
+    {
+      "id": "job_ml_batch_inference",
+      "name": "Machine Learning Demand Forecasting Pipeline",
+      "type": "ml_pipeline",
+      "script": "ml/inference/batch_inference.py",
+      "active_model": "baseline_naive (MAE 6.70)",
+      "state_registry": "state/ml/"
+    },
+    {
+      "id": "ds_ml_forecasts",
+      "name": "ML Predictions & Production Recommendations",
+      "type": "ml_predictions",
+      "location": "state/ml/predictions/latest/",
+      "format": "Apache Parquet"
+    },
+    {
+      "id": "svc_backend_fastapi_duckdb",
+      "name": "FastAPI REST API & DuckDB Query Engine",
+      "type": "serving_layer",
+      "port": 8000,
+      "security": "Role-Based Access Control (RBAC: Viewer, Operator, Admin)"
+    },
+    {
+      "id": "app_react_dashboard",
+      "name": "Toko Roti Pagi Sales Analytics Web Dashboard",
+      "type": "presentation_layer",
+      "port": 5173,
+      "technology": "React + Vite + TypeScript + Tailwind + Recharts"
+    }
+  ],
+  "edges": [
+    {"source": "src_esb_transactions_excel", "target": "job_producer_replay"},
+    {"source": "job_producer_replay", "target": "broker_redpanda_topic"},
+    {"source": "broker_redpanda_topic", "target": "job_spark_streaming_bronze"},
+    {"source": "job_spark_streaming_bronze", "target": "ds_bronze_transactions"},
+    {"source": "ds_bronze_transactions", "target": "job_spark_silver_batch"},
+    {"source": "job_spark_silver_batch", "target": "ds_silver_sales_bills"},
+    {"source": "job_spark_silver_batch", "target": "ds_silver_sales_items"},
+    {"source": "ds_silver_sales_bills", "target": "job_spark_gold_batch"},
+    {"source": "ds_silver_sales_items", "target": "job_spark_gold_batch"},
+    {"source": "job_spark_gold_batch", "target": "ds_gold_marts"},
+    {"source": "ds_gold_marts", "target": "job_ml_batch_inference"},
+    {"source": "job_ml_batch_inference", "target": "ds_ml_forecasts"},
+    {"source": "ds_gold_marts", "target": "svc_backend_fastapi_duckdb"},
+    {"source": "ds_ml_forecasts", "target": "svc_backend_fastapi_duckdb"},
+    {"source": "svc_backend_fastapi_duckdb", "target": "app_react_dashboard"}
+  ]
+}

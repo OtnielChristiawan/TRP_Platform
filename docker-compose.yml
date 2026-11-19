@@ -130,7 +130,7 @@ services:
   silver-scheduler:
     extends:
       service: silver-batch
-    command: ["--interval", "900"]
+    command: ["--interval", "600"]
     profiles: ['silver-scheduler']
     restart: unless-stopped
   gold-batch:
@@ -152,8 +152,39 @@ services:
   gold-scheduler:
     extends:
       service: gold-batch
-    command: ["--interval", "1800"]
+    command: ["--interval", "1200"]
     profiles: ['gold-scheduler']
+    restart: unless-stopped
+  backend-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      S3_ENDPOINT: "http://minio:9000"
+      MINIO_ROOT_USER: "bakeryadmin"
+      MINIO_ROOT_PASSWORD: "bakerydemo123"
+      GOLD_BUCKET: "bakery-gold"
+      DUCKDB_EXT_DIR: "/opt/bakery/state/duckdb_ext"
+    volumes:
+      - ./backend/app:/app/app
+      - ./state:/opt/bakery/state
+      - ./state/duckdb_ext:/opt/bakery/state/duckdb_ext
+      - ./state/ml:/opt/bakery/state/ml
+    depends_on:
+      minio: {condition: service_started}
+    profiles: ['dashboard', 'api']
+    restart: unless-stopped
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend-api: {condition: service_started}
+    profiles: ['dashboard', 'ui']
     restart: unless-stopped
 volumes:
   redpanda_data:

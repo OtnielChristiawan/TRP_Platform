@@ -12,8 +12,8 @@
 INSTALL httpfs;
 LOAD httpfs;
 
--- Konfigurasi S3 Secret untuk MinIO lokal
-CREATE OR REPLACE SECRET minio_secret (
+-- Konfigurasi S3 Secret PERMANEN untuk MinIO lokal (Hanya perlu di-run 1x selamanya!)
+CREATE OR REPLACE PERSISTENT SECRET minio_secret (
     TYPE S3,
     KEY_ID 'bakeryadmin',
     SECRET 'bakerydemo123',

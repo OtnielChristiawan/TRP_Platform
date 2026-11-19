@@ -1,0 +1,66 @@
+{
+  "version": "1.0.0",
+  "platform": "Bakery Data Platform V4",
+  "compliance": "F-15 Alerting System",
+  "updated_at": "2026-11-19T21:12:00Z",
+  "rules": [
+    {
+      "id": "ALERT_A_JOB_FAILURE",
+      "name": "Spark Batch Job Execution Failure",
+      "metric": "job_exit_code",
+      "description": "Fires when a scheduled batch job (Silver/Gold/Master Menu) terminates with non-zero exit code or fails to commit snapshot.",
+      "threshold": {
+        "operator": ">=",
+        "value": 1,
+        "unit": "failure_count"
+      },
+      "window_seconds": 900,
+      "severity": "CRITICAL",
+      "owner": "Data Engineer on-duty",
+      "channels": ["file_log", "api", "webhook"],
+      "runbook": "docs/runbooks/ALERT_JOB_FAILURE.md",
+      "resolution_condition": "Next job execution finishes with exit code 0 and commits successfully."
+    },
+    {
+      "id": "ALERT_B_STREAM_LAG",
+      "name": "Stream Freshness High Lag / Ingestion Delay",
+      "metric": "stream_freshness_seconds",
+      "description": "Fires when time since last received transaction event exceeds 30 minutes during operating hours or consumer offset backlog exceeds 100 messages.",
+      "threshold": {
+        "operator": ">",
+        "value": 1800,
+        "unit": "seconds"
+      },
+      "secondary_threshold": {
+        "metric": "consumer_lag_messages",
+        "operator": ">",
+        "value": 100,
+        "unit": "messages"
+      },
+      "window_seconds": 300,
+      "severity": "WARNING",
+      "owner": "Streaming Platform Engineer",
+      "channels": ["file_log", "api", "webhook"],
+      "runbook": "docs/runbooks/ALERT_STREAM_LAG.md",
+      "resolution_condition": "New transaction ingested and freshness drops below 300 seconds."
+    },
+    {
+      "id": "ALERT_C_SERVICE_UNHEALTHY",
+      "name": "Infrastructure Container or Host Resource Critical",
+      "metric": "container_health_or_ram_percent",
+      "description": "Fires when any critical Docker container exits/reports unhealthy or host RAM usage exceeds 90%.",
+      "threshold": {
+        "operator": ">=",
+        "value": 90.0,
+        "unit": "percent"
+      },
+      "container_condition": "status != 'running' and status != 'healthy'",
+      "window_seconds": 120,
+      "severity": "CRITICAL",
+      "owner": "DevOps / Infrastructure Engineer",
+      "channels": ["file_log", "api", "webhook"],
+      "runbook": "docs/runbooks/ALERT_SERVICE_UNHEALTHY.md",
+      "resolution_condition": "All services return running/healthy and memory drops below 85%."
+    }
+  ]
+}

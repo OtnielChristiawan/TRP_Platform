@@ -203,6 +203,10 @@ docker compose --profile "*" down
 ```
 > **PENTING:** Jangan gunakan flag `-v`! Semua data transaksi di Kafka, bucket MinIO (Bronze & Silver), dan checkpoint Spark akan tersimpan aman di volume Docker.
 
+atau
+
+> .\stop_all.ps1
+
 ---
 
 ### 2. Cara Menghidupkan Kembali Sistem (Startup)
@@ -245,11 +249,48 @@ docker compose --profile "*" down
    docker compose --profile silver-scheduler up -d silver-scheduler
    ```
 
+6. **Jalankan Sales Analytics Dashboard (FastAPI & React UI):**
+   ```powershell
+   # Jalankan backend API dan frontend dashboard bersamaan:
+   docker-compose --profile dashboard up -d
+
+   # Akses Web Dashboard di browser:
+   # http://localhost:5173
+
+   # Akses Dokumentasi Interaktif Swagger REST API:
+   # http://localhost:8000/docs
+   ```
+
 #### Opsi B: Nyalakan Semua Service Sekaligus (All Daemon Mode)
 Jika semua pipeline sudah siap dan ingin menjalankan seluruh daemon background:
 ```powershell
-docker compose --profile spark --profile scheduler --profile silver-scheduler up -d
+docker-compose --profile spark --profile scheduler --profile silver-scheduler --profile gold-scheduler --profile dashboard up -d
 ```
+
+atau > .\start_all.ps1
+---
+
+## Sales Analytics Dashboard & REST API
+
+Aplikasi dashboard analitik modern untuk Toko Roti Pagi (TRP) yang terhubung langsung ke **Gold Layer Parquet** di MinIO via engine query **DuckDB**:
+
+### 1. Fitur Halaman Dashboard
+- **Overview:** Ringkasan KPI eksekutif (Net Sales, Total Bills, Qty Sold, AOV), grafik tren penjualan harian, pola jam sibuk transaksi, Top 5 Menu terlaris, dan pangsa pasar kategori.
+- **Sales Analytics:** Visualisasi mendalam penjualan bersih harian, jam sibuk operasional kasir, serta tabel data harian per cabang.
+- **Product & Menu Analytics:** Peringkat menu terlaris (sort by Net Sales / Qty), pencarian nama menu, filter kategori, status item promo gratis (`zero_price_qty`), dan status rekonsiliasi Master Menu (`MATCHED`/`UNMATCHED`).
+- **Payment Analytics:** Distribusi metode pembayaran (CASH, QRIS BRI) dihitung dari level *bill grain* tanpa risiko penggandaan nominal transaksi.
+- **Global Filters:** Filter dinamis tanggal mulai, tanggal akhir, dan cabang yang secara otomatis disesuaikan dengan rentang data yang tersedia di Gold Layer.
+
+### 2. Endpoint REST API FastAPI (`http://localhost:8000`)
+- `GET /api/v1/health`: Status kesehatan backend dan informasi versi.
+- `GET /api/v1/data/freshness`: Metadata run ID batch Gold, status sinkronisasi, dan timestamp transaksi terbaru.
+- `GET /api/v1/filters`: Pilihan filter cabang, rentang tanggal (min/max), kategori, dan metode pembayaran.
+- `GET /api/v1/dashboard/summary`: Agregasi KPI utama dan perbandingan pertumbuhan periode lalu.
+- `GET /api/v1/sales/daily`: Data runtun waktu penjualan harian.
+- `GET /api/v1/sales/hourly`: Agregasi volume dan nilai transaksi per jam (WIB).
+- `GET /api/v1/menus/top`: Peringkat produk menu teratas (`limit`, `sort_by`, `category`).
+- `GET /api/v1/categories/performance`: Kontribusi penjualan per kategori produk.
+- `GET /api/v1/payments/summary`: Pembagian metode pembayaran dan persentase kontribusi.
 
 ---
 
@@ -276,3 +317,42 @@ docker compose --profile spark --profile scheduler --profile silver-scheduler up
   ```sql
   SET TimeZone = 'Asia/Jakarta';
   ```
+
+
+---
+
+## Machine Learning Demand Forecasting & Production Planner (F-11, F-12, F-13)
+
+Modul Machine Learning terintegrasi penuh untuk peramalan permintaan roti/minuman dan perencanaan produksi dapur:
+
+### 1. Fitur Halaman Demand Forecasting (`http://localhost:5173/forecast`)
+- **Section A — Forecast Overview (KPIs):** Estimasi total kuantitas produk terjual besok (H+1), jumlah menu terprediksi, model aktif, dan top demanded menu.
+- **Section B — Seven-Day Demand Trend:** Proyeksi multi-step total penjualan 7 hari ke depan (H+1 s/d H+7) dengan faktor musiman akhir pekan.
+- **Section C — Product Demand Forecast:** Tabel prediksi detail per menu dengan pencarian cepat dan filter kategori.
+- **Section D — Hourly Demand Forecast:** Estimasi kurva jam sibuk operasional kasir (09:00 - 19:00 WIB) untuk persiapan staf dan batch oven.
+- **Section E — Production Preparation Recommendation:** Rekomendasi kuantitas batch siap panggang (`Forecast Qty + Safety Stock Buffer Z*σ`), alasan kebijakan, dan operational disclaimer.
+- **Section F — Model Performance & Governance:** Evaluasi obyektif terhadap holdout test set (MAE, RMSE, WAPE) dan tabel perbandingan Model 1 (Baseline) vs Model 2 (Ridge) vs Model 3 (Random Forest).
+
+### 2. Endpoint REST API ML (`http://localhost:8000/api/v1/ml/*`)
+- `GET /api/v1/ml/summary`: Ringkasan KPI eksekutif prediksi besok.
+- `GET /api/v1/ml/forecast/products`: Prediksi permintaan per menu (`branch`, `forecast_date`, `menu_key`, `limit`).
+- `GET /api/v1/ml/forecast/weekly`: Proyeksi permintaan total 7 hari ke depan.
+- `GET /api/v1/ml/forecast/hourly`: Distribusi jam sibuk operasional untuk hari berikutnya.
+- `GET /api/v1/ml/recommendations`: Saran jumlah persiapan batch baking tim produksi dapur.
+- `GET /api/v1/ml/model/metrics`: Metrik evaluasi aktual model (MAE, RMSE, WAPE) dan model registry.
+- `GET /api/v1/ml/model/status`: Status kesehatan model dan audit data readiness.
+
+### 3. Perintah PowerShell Eksekusi ML
+```powershell
+# Jalankan Training Manual (Multi-Model Training & Evaluation)
+& ".venv\Scripts\python.exe" -m ml.training.train_runner
+
+# Jalankan Batch Inference Manual (4 Output Bisnis)
+& ".venv\Scripts\python.exe" -m ml.inference.batch_inference
+
+# Jalankan Scheduler (Minggu 02:00 WIB Training, Tiap Hari 03:00 WIB Inference)
+& ".venv\Scripts\python.exe" -m ml.scheduler --loop
+
+# Jalankan Seluruh Test Suite (49 Tests Unit & Integrasi)
+& ".venv\Scripts\pytest.exe" tests/ backend/tests/ -v
+```

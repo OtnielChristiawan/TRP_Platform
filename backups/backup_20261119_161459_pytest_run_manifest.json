@@ -1,0 +1,130 @@
+{
+  "backup_id": "backup_20261119_161459_pytest_run",
+  "created_at": "2026-11-19T16:14:59.918024+00:00",
+  "total_files": 24,
+  "total_size_bytes": 42961926,
+  "archive_file": "backup_20261119_161459_pytest_run.tar.gz",
+  "status": "SUCCESS",
+  "files": [
+    {
+      "relative_path": "monitoring/alert_rules.json",
+      "size_bytes": 2534,
+      "sha256": "cb9fd770e75bfb82fa3192533323bbfa1782f4db59e8fb7d8eaee8a32d63d803"
+    },
+    {
+      "relative_path": "state/alerts/notifications.jsonl",
+      "size_bytes": 16827,
+      "sha256": "7d19e24a51ac5b3ec210656efd175e58993cf5317852bda015790ce9df000974"
+    },
+    {
+      "relative_path": "state/audit_log.jsonl",
+      "size_bytes": 6889,
+      "sha256": "792ba62b662a34fd83f7d6b8e332db3085dc753ca5501e3082e3ef1a2fee55d0"
+    },
+    {
+      "relative_path": "state/gold_state.sqlite",
+      "size_bytes": 24576,
+      "sha256": "73a4a54b3244bb4389d89e64296f1ed77ac5d61f4ce2e7cd4ef625b6aa07183e"
+    },
+    {
+      "relative_path": "state/master_menu.sqlite",
+      "size_bytes": 12288,
+      "sha256": "771e41e11764b7bc7b8d78cd899c299e1a587748cd5ce8e921acf9ea7326b26e"
+    },
+    {
+      "relative_path": "state/ml/experiments/baseline_naive_20261119_174803.json",
+      "size_bytes": 1049,
+      "sha256": "7390a5d11ad6f075a1a44ff861e42c47481b0f0a1cbfdbe33b5966fee277d3e3"
+    },
+    {
+      "relative_path": "state/ml/experiments/baseline_naive_20261119_175604.json",
+      "size_bytes": 691,
+      "sha256": "3d6dfb7032cd504f0586f62ef4346e7460aac62de4961cb63808d563ef681faf"
+    },
+    {
+      "relative_path": "state/ml/experiments/baseline_naive_20261119_175621.json",
+      "size_bytes": 691,
+      "sha256": "d13d028ba4e2fd7a4dbe677f5472f098a0c8e18d2373f6b833053695c881b029"
+    },
+    {
+      "relative_path": "state/ml/experiments/baseline_naive_20261119_210049.json",
+      "size_bytes": 691,
+      "sha256": "5c672a53b6f411d6cb5915db8b797f85ccb9a8d87643572b5c0b6100d852ff67"
+    },
+    {
+      "relative_path": "state/ml/experiments/baseline_naive_20261119_211502.json",
+      "size_bytes": 691,
+      "sha256": "8a4566efe27a4d4e8b3418f1da31b19f7c55821d722997209daf2aa06ef2054d"
+    },
+    {
+      "relative_path": "state/ml/experiments/baseline_naive_20261119_220132.json",
+      "size_bytes": 691,
+      "sha256": "dad3c28b8463bc7bc650c82b1a93b3c1aa66e1f2e9da74e6376f947281210785"
+    },
+    {
+      "relative_path": "state/ml/experiments/random_forest_20261119_174804.json",
+      "size_bytes": 1094,
+      "sha256": "c772b8841e100de85375f11008b0e9f11ea51621c64692c26227340753c336ea"
+    },
+    {
+      "relative_path": "state/ml/experiments/ridge_regression_20261119_174803.json",
+      "size_bytes": 1073,
+      "sha256": "66cbc2faa537ccd5098cf161a5d71f0b7bed9fa3608a508870b09447be3c99b6"
+    },
+    {
+      "relative_path": "state/ml/models/baseline_naive_20261119_174803.joblib",
+      "size_bytes": 1641,
+      "sha256": "7c4b674f8c5e71314f63cf67dc6755dfe3f3935455da02db6bbe46c78ced28c6"
+    },
+    {
+      "relative_path": "state/ml/models/baseline_naive_20261119_175604.joblib",
+      "size_bytes": 206,
+      "sha256": "e9f5b6d831f2e63f5bd3196d05574e34c8b49d702e50bb13ce1eba2031896782"
+    },
+    {
+      "relative_path": "state/ml/models/baseline_naive_20261119_175621.joblib",
+      "size_bytes": 206,
+      "sha256": "e9f5b6d831f2e63f5bd3196d05574e34c8b49d702e50bb13ce1eba2031896782"
+    },
+    {
+      "relative_path": "state/ml/models/baseline_naive_20261119_210049.joblib",
+      "size_bytes": 206,
+      "sha256": "e9f5b6d831f2e63f5bd3196d05574e34c8b49d702e50bb13ce1eba2031896782"
+    },
+    {
+      "relative_path": "state/ml/models/baseline_naive_20261119_211502.joblib",
+      "size_bytes": 206,
+      "sha256": "e9f5b6d831f2e63f5bd3196d05574e34c8b49d702e50bb13ce1eba2031896782"
+    },
+    {
+      "relative_path": "state/ml/models/baseline_naive_20261119_220132.joblib",
+      "size_bytes": 206,
+      "sha256": "e9f5b6d831f2e63f5bd3196d05574e34c8b49d702e50bb13ce1eba2031896782"
+    },
+    {
+      "relative_path": "state/ml/models/random_forest_20261119_174804.joblib",
+      "size_bytes": 34294,
+      "sha256": "b89e0ced55db2ea60950f7724ef52f95da39f3b2c5b5476dfa4d43d205ff2ab3"
+    },
+    {
+      "relative_path": "state/ml/models/ridge_regression_20261119_174803.joblib",
+      "size_bytes": 2429,
+      "sha256": "3536a530e3fee8c17fe573d7e5cd043e04b2bd2d957f9673a9f6e611eec5db44"
+    },
+    {
+      "relative_path": "state/ml/predictions/manifest.json",
+      "size_bytes": 395,
+      "sha256": "4385068c06e17472a0f4f8375d4dd3269e4f67657ba800b7e778eb6b23ceafbb"
+    },
+    {
+      "relative_path": "state/replay_full_corrected.sqlite",
+      "size_bytes": 42827776,
+      "sha256": "c77b40d7e550406586dd7bd20f2752da0fa98bba371add1e2d1489479af0102b"
+    },
+    {
+      "relative_path": "state/silver_state.sqlite",
+      "size_bytes": 24576,
+      "sha256": "ce806976db4b9eb886ad7e37d3980910c8acd4935bcf59ee72e3563dffc88b17"
+    }
+  ]
+}
